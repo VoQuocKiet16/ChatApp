@@ -8,158 +8,188 @@ interface VoiceCallProps {
     roomId: string;
     onEndCall?: () => void;
     activeCall?: MatrixCall | null;
-    callerName?: string; // Thêm prop để hiển thị tên người nhận
+    callerName?: string;
 }
 
-const VoiceCall: React.FC<VoiceCallProps> = ({ callService, roomId, onEndCall, activeCall, callerName = 'Người dùng không xác định' }) => {
-    const [call, setCall] = useState<MatrixCall | null>(activeCall || null);
-    const [isCalling, setIsCalling] = useState(!!activeCall);
+const VoiceCall: React.FC<VoiceCallProps> = ({ callService, roomId, onEndCall, activeCall, callerName = 'Unknown User' }) => {
+    const [call, setCall] = useState<MatrixCall | null>(null);
+    const [isCalling, setIsCalling] = useState(false);
+    const [callState, setCallState] = useState<string>(''); 
     const [error, setError] = useState<string | null>(null);
-    const [callDuration, setCallDuration] = useState<number>(0); // Thời gian cuộc gọi (tính bằng giây)
-    const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(false); // Trạng thái loa
-    const [isMicOn, setIsMicOn] = useState<boolean>(true); // Trạng thái mic
+    const [callDuration, setCallDuration] = useState<number>(0);
+    const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(false);
+    const [isMicOn, setIsMicOn] = useState<boolean>(true);
     const localAudioRef = useRef<HTMLAudioElement>(null);
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
-    // Tính thời gian cuộc gọi
     useEffect(() => {
-        let timer: NodeJS.Timeout | null = null;
-        if (isCalling) {
-            timer = setInterval(() => {
-                setCallDuration((prev) => prev + 1);
-            }, 1000);
-        }
-        return () => {
-            if (timer) clearInterval(timer);
+        console.log('VoiceCall useEffect for listeners triggered');
+
+        const handleDurationUpdate = (duration: number) => {
+            console.log('Call duration updated in VoiceCall:', duration);
+            setCallDuration(duration); // Cập nhật thời gian trực tiếp
         };
-    }, [isCalling]);
+
+        const handleStateUpdate = (state: string) => {
+            console.log('Call state in VoiceCall:', state);
+            setCallState(state);
+            if (state === 'connected') {
+                setIsCalling(true);
+            } else {
+                setIsCalling(false);
+                setCallDuration(0);
+            }
+        };
+
+        const removeDurationListener = callService.onCallDuration(handleDurationUpdate);
+        const removeStateListener = callService.onCallState(handleStateUpdate);
+
+        return () => {
+            console.log('VoiceCall cleanup listeners');
+            removeDurationListener();
+            removeStateListener();
+            if (!callService.getActiveCall()) {
+                callService.hangupCall();
+            }
+        };
+    }, [callService]);
 
     useEffect(() => {
+        console.log('VoiceCall useEffect for activeCall triggered, activeCall:', activeCall ? 'exists' : 'not exists');
         if (activeCall) {
             setCall(activeCall);
             setIsCalling(true);
             setupCallListeners(activeCall);
+            const remoteStream = activeCall.getRemoteFeeds()[0]?.stream;
+            if (remoteStream) {
+                setCallState('connected');
+                setIsCalling(true);
+            }
+        } else {
+            setCall(null);
+            setIsCalling(false);
+            setCallState('');
+            setCallDuration(0);
+            if (localAudioRef.current) localAudioRef.current.srcObject = null;
+            if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
         }
     }, [activeCall]);
 
-    // Định dạng thời gian cuộc gọi (MM:SS)
     const formatDuration = (seconds: number) => {
         const minutes = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const setupCallListeners = (call: MatrixCall) => {
         call.on(CallEvent.FeedsChanged, () => {
             const localStream = call.getLocalFeeds()[0]?.stream;
             const remoteStream = call.getRemoteFeeds()[0]?.stream;
+            console.log('Local stream:', localStream ? 'exists' : 'not exists');
+            console.log('Remote stream:', remoteStream ? 'exists' : 'not exists');
             if (localAudioRef.current && localStream) localAudioRef.current.srcObject = localStream;
             if (remoteAudioRef.current && remoteStream) remoteAudioRef.current.srcObject = remoteStream;
+            if (remoteStream && callState !== 'connected') {
+                setCallState('connected');
+                setIsCalling(true);
+            }
         });
         call.on(CallEvent.Hangup, () => {
+            console.log('Call hung up in VoiceCall');
             setIsCalling(false);
             setCall(null);
+            setCallState('');
             setCallDuration(0);
+            if (localAudioRef.current) localAudioRef.current.srcObject = null;
+            if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
             onEndCall?.();
         });
         call.on(CallEvent.Error, (err) => {
+            console.error('Call error in VoiceCall:', err.message);
             setError(err.message);
             setIsCalling(false);
             setCall(null);
+            setCallState('');
             setCallDuration(0);
+            if (localAudioRef.current) localAudioRef.current.srcObject = null;
+            if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
             onEndCall?.();
         });
     };
 
-    const startVoiceCall = async () => {
-        try {
-            const newCall = await callService.startVoiceCall(roomId);
-            setCall(newCall);
-            setIsCalling(true);
-            setupCallListeners(newCall);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Lỗi không xác định');
-        }
-    };
-
     const hangupCall = () => {
+        console.log('User clicked hangup button');
         callService.hangupCall();
         setIsCalling(false);
         setCall(null);
+        setCallState('');
         setCallDuration(0);
+        if (localAudioRef.current) localAudioRef.current.srcObject = null;
+        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
         onEndCall?.();
     };
 
     const toggleSpeaker = () => {
         setIsSpeakerOn((prev) => !prev);
-        // Logic để bật/tắt loa (nếu cần)
+        // TODO: Thêm logic thực sự bật/tắt loa
     };
 
     const toggleMic = () => {
         setIsMicOn((prev) => !prev);
-        // Logic để bật/tắt mic (nếu cần)
+        if (call) {
+            const localFeed = call.getLocalFeeds()[0];
+            if (localFeed) {
+                const audioTracks = localFeed.stream.getAudioTracks();
+                audioTracks.forEach((track) => (track.enabled = !isMicOn));
+            }
+        }
     };
 
+    const isConnected = callState === 'connected';
+    console.log('isConnected:', isConnected, 'callState:', callState);
+
     return (
-        <div className="h-screen bg-blue-600 flex flex-col items-center justify-between p-4">
-            {/* Header */}
-            <div className="flex items-center justify-between w-full">
-                <button className="text-white">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </button>
-                <h1 className="text-white text-lg font-semibold">Zalo</h1>
-                <button className="text-white">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l5-5m0 10l-5-5" />
-                    </svg>
-                </button>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex flex-col items-center">
-                <div className="w-32 h-32 rounded-full bg-gray-300 mb-4 overflow-hidden">
-                    {/* Placeholder cho ảnh đại diện */}
-                    {/* <img src="/placeholder-avatar.jpg" alt="Avatar" className="w-full h-full object-cover" /> */}
-                </div>
-                <h2 className="text-white text-2xl font-semibold">{callerName}</h2>
-                <p className="text-white text-sm mt-2">
-                    {isCalling ? formatDuration(callDuration) : 'Đang nối máy đến nguồn nhận'}
+        <div className="h-screen bg-gray-800 flex flex-col items-center justify-between p-6">
+            <div className="w-full text-center pt-10">
+                <h2 className="text-white text-xl font-medium">{callerName}</h2>
+                <p className="text-gray-400 text-sm mt-1">
+                    {isConnected ? formatDuration(callDuration) : 'Đang chờ kết nối...'}
                 </p>
+                {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
             </div>
 
-            {/* Controls */}
-            <div className="flex justify-around w-full mb-8">
-                <button
-                    onClick={toggleSpeaker}
-                    className={`w-16 h-16 rounded-full flex items-center justify-center ${isSpeakerOn ? 'bg-blue-800' : 'bg-blue-500'}`}
-                >
-                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707A1 1 0 0112 5v14a1 1 0 01-1.707.707L5.586 15z" />
-                    </svg>
-                    <span className="text-white text-xs mt-1">Loa</span>
-                </button>
+            <div className="flex-grow flex items-center justify-center">
+                <div className="w-28 h-28 rounded-full bg-gray-600 overflow-hidden">
+                    {/* Placeholder cho ảnh đại diện */}
+                </div>
+            </div>
 
+            <div className="flex flex-col items-center w-full mb-10">
+                <div className="flex justify-around w-full max-w-xs mb-8">
+                    <button
+                        onClick={toggleMic}
+                        className={`w-12 h-12 rounded-full flex items-center justify-center ${isMicOn ? 'bg-gray-600' : 'bg-gray-500'}`}
+                    >
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isMicOn ? "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" : "M19 11 Ning7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-5-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3zM5 5l14 14"} />
+                        </svg>
+                    </button>
+                    <button
+                        onClick={toggleSpeaker}
+                        className={`w-12 h-12 rounded-full flex items-center justify-center ${isSpeakerOn ? 'bg-gray-500' : 'bg-gray-600'}`}
+                    >
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707A1 1 0 0112 5v14a1 1 0 01-1.707.707L5.586 15z" />
+                        </svg>
+                    </button>
+                </div>
                 <button
-                    onClick={isCalling ? hangupCall : startVoiceCall}
-                    className={`w-16 h-16 rounded-full flex items-center justify-center ${isCalling ? 'bg-red-500' : 'bg-green-500'}`}
+                    onClick={hangupCall}
+                    className="w-20 h-20 rounded-full flex items-center justify-center bg-red-500"
                 >
-                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isCalling ? "M6 18L18 6M6 6l12 12" : "M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"} />
+                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
-                    <span className="text-white text-xs mt-1">{isCalling ? 'Kết thúc' : 'Gọi'}</span>
-                </button>
-
-                <button
-                    onClick={toggleMic}
-                    className={`w-16 h-16 rounded-full flex items-center justify-center ${isMicOn ? 'bg-blue-500' : 'bg-blue-800'}`}
-                >
-                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isMicOn ? "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" : "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-5-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3zM5 5l14 14"} />
-                    </svg>
-                    <span className="text-white text-xs mt-1">Mic</span>
                 </button>
             </div>
 
