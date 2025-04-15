@@ -25,7 +25,9 @@ export class CallService {
             throw new Error('Không thể tạo cuộc gọi thoại: createNewMatrixCall trả về null');
         }
         try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('Microphone stream obtained:', stream.id);
+            // newCall.setLocalAudioVideoStream(stream); // Explicitly set stream
         } catch (err) {
             throw new Error('Không thể truy cập micro: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
         }
@@ -35,30 +37,34 @@ export class CallService {
         return newCall;
     }
 
-    async startVideoCall(roomId: string): Promise<MatrixCall> {
-        console.log('Starting video call for room:', roomId);
-        this.cleanupCall();
-        const newCall = createNewMatrixCall(this.matrixClient, roomId);
-        if (!newCall) {
-            throw new Error('Không thể tạo cuộc gọi video: createNewMatrixCall trả về null');
-        }
-        try {
-            await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        } catch (err) {
-            throw new Error('Không thể truy cập camera/micro: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
-        }
-        newCall.placeVideoCall();
-        this.activeCall = newCall;
-        this.setupCallListeners(newCall);
-        return newCall;
-    }
+    // async startVideoCall(roomId: string): Promise<MatrixCall> {
+    //     console.log('Starting video call for room:', roomId);
+    //     this.cleanupCall();
+    //     const newCall = createNewMatrixCall(this.matrixClient, roomId);
+    //     if (!newCall) {
+    //         throw new Error('Không thể tạo cuộc gọi video: createNewMatrixCall trả về null');
+    //     }
+    //     try {
+    //         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    //         console.log('Camera and microphone stream obtained:', stream.id);
+    //         newCall.setLocalAudioVideoStream(stream); // Explicitly set stream
+    //     } catch (err) {
+    //         throw new Error('Không thể truy cập camera/micro: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
+    //     }
+    //     newCall.placeVideoCall();
+    //     this.activeCall = newCall;
+    //     this.setupCallListeners(newCall);
+    //     return newCall;
+    // }
 
     async answerCall(call: MatrixCall): Promise<void> {
         console.log('Answering call:', call.callId);
         this.cleanupCall();
         const isVoiceCall = call.type === 'voice';
         try {
-            await navigator.mediaDevices.getUserMedia({ audio: true, video: !isVoiceCall });
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !isVoiceCall });
+            console.log('Media stream obtained for answering:', stream.id);
+            // call.setLocalAudioVideoStream(stream); // Explicitly set stream
         } catch (err) {
             throw new Error('Không thể truy cập thiết bị: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
         }
@@ -187,7 +193,6 @@ export class CallService {
         call.on(CallEvent.Hangup, onHangup);
         call.on(CallEvent.Error, onError);
 
-        // Timeout để tự động ngắt nếu không có phản hồi
         this.timeoutId = setTimeout(() => {
             if (this.isConnected || this.activeCall) {
                 console.warn('Call timeout, forcing hangup for call:', call.callId);
@@ -195,7 +200,6 @@ export class CallService {
             }
         }, 60000);
 
-        // Cleanup timeout khi cuộc gọi kết thúc
         call.on(CallEvent.Hangup, () => {
             if (this.timeoutId) {
                 clearTimeout(this.timeoutId);

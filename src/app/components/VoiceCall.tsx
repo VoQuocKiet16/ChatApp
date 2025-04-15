@@ -21,7 +21,7 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
     receiverName = 'Unknown User',
     isCaller = false,
 }) => {
-    console.log('VoiceCall props:', { callerName, receiverName, isCaller }); // Log props for debugging
+    console.log('VoiceCall props:', { callerName, receiverName, isCaller });
     const [call, setCall] = useState<MatrixCall | null>(null);
     const [isCalling, setIsCalling] = useState(false);
     const [callState, setCallState] = useState<string>('');
@@ -29,8 +29,8 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
     const [callDuration, setCallDuration] = useState<number>(0);
     const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(false);
     const [isMicOn, setIsMicOn] = useState<boolean>(true);
-    const localAudioRef = useRef<HTMLAudioElement>(null);
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
+    const currentStreamId = useRef<string | null>(null); // Track current stream to prevent reassignment
 
     useEffect(() => {
         console.log('VoiceCall useEffect for listeners triggered');
@@ -66,11 +66,23 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
         setCall(null);
         setCallState('');
         setCallDuration(0);
-        if (localAudioRef.current) localAudioRef.current.srcObject = null;
-        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = null;
+            remoteAudioRef.current.pause(); // Ensure playback stops
+        }
+        currentStreamId.current = null; // Reset stream tracking
         callService.hangupCall();
         onEndCall?.();
     }, [callService, onEndCall]);
+
+    const playRemoteAudio = useCallback(() => {
+        if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
+            remoteAudioRef.current.play().catch((err) => {
+                console.error('Error playing remote audio:', err);
+                setError('Không thể phát âm thanh cuộc gọi: ' + err.message);
+            });
+        }
+    }, []);
 
     const setupCallListeners = useCallback(
         (call: MatrixCall) => {
@@ -79,9 +91,18 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
                 const localStream = call.getLocalFeeds()[0]?.stream;
                 const remoteStream = call.getRemoteFeeds()[0]?.stream;
                 console.log('Local stream:', localStream ? 'exists' : 'not exists');
-                console.log('Remote stream:', remoteStream ? 'exists' : 'not exists');
-                if (localAudioRef.current && localStream) localAudioRef.current.srcObject = localStream;
-                if (remoteAudioRef.current && remoteStream) remoteAudioRef.current.srcObject = remoteStream;
+                console.log('Remote stream:', remoteStream ? 'exists' : 'not exists', 'streamId:', remoteStream?.id);
+                if (remoteStream && remoteAudioRef.current) {
+                    // Only assign stream if it’s new or different
+                    if (currentStreamId.current !== remoteStream.id) {
+                        console.log('Assigning new remote stream:', remoteStream.id);
+                        remoteAudioRef.current.srcObject = remoteStream;
+                        currentStreamId.current = remoteStream.id;
+                        playRemoteAudio();
+                    } else {
+                        console.log('Skipping redundant stream assignment:', remoteStream.id);
+                    }
+                }
                 if (remoteStream && callState !== 'connected') {
                     setCallState('connected');
                     setIsCalling(true);
@@ -119,7 +140,7 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
                 call.removeListener(CallEvent.State, onStateChange);
             };
         },
-        [callState, cleanupCallState]
+        [callState, cleanupCallState, playRemoteAudio]
     );
 
     useEffect(() => {
@@ -130,9 +151,15 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
             setIsCalling(true);
             cleanupListeners = setupCallListeners(activeCall);
             const remoteStream = activeCall.getRemoteFeeds()[0]?.stream;
-            if (remoteStream) {
-                setCallState('connected');
-                setIsCalling(true);
+            if (remoteStream && remoteAudioRef.current) {
+                if (currentStreamId.current !== remoteStream.id) {
+                    console.log('Assigning initial remote stream:', remoteStream.id);
+                    remoteAudioRef.current.srcObject = remoteStream;
+                    currentStreamId.current = remoteStream.id;
+                    playRemoteAudio();
+                } else {
+                    console.log('Skipping redundant initial stream assignment:', remoteStream.id);
+                }
             }
         } else if (!activeCall && call) {
             cleanupCallState();
@@ -143,7 +170,7 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
                 cleanupListeners();
             }
         };
-    }, [activeCall, call, setupCallListeners, cleanupCallState]);
+    }, [activeCall, call, setupCallListeners, cleanupCallState, playRemoteAudio]);
 
     const formatDuration = (seconds: number) => {
         const minutes = Math.floor(seconds / 60);
@@ -159,7 +186,7 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
     const toggleSpeaker = () => {
         console.log('Toggling speaker, current state:', isSpeakerOn);
         setIsSpeakerOn((prev) => !prev);
-        // TODO: Thêm logic thực sự bật/tắt loa
+        // TODO: Implement speaker toggle logic (e.g., switch audio output device)
     };
 
     const toggleMic = () => {
@@ -170,7 +197,7 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
             if (localFeed) {
                 const audioTracks = localFeed.stream.getAudioTracks();
                 audioTracks.forEach((track) => {
-                    track.enabled = !isMicOn;
+                    track.enabled = isMicOn; // Enable mic when isMicOn is true
                     console.log('Mic track enabled:', track.enabled);
                 });
             }
@@ -241,7 +268,6 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
                 </button>
             </div>
 
-            <audio ref={localAudioRef} autoPlay muted className="hidden" />
             <audio ref={remoteAudioRef} autoPlay className="hidden" />
         </div>
     );
