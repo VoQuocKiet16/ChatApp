@@ -47,8 +47,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, currentUserId }) =>
                             </div>
                             {/* Message Content */}
                             <div
-                                className={`max-w-xs p-3 rounded-lg ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'
-                                    }`}
+                                className={`max-w-xs p-3 rounded-lg break-words ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}`}
                             >
                                 <p>{message.body}</p>
                                 <p className={`text-xs mt-1 ${isCurrentUser ? 'text-blue-200' : 'text-gray-500'}`}>
