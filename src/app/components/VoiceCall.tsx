@@ -191,17 +191,20 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
 
     const toggleMic = () => {
         console.log('Toggling mic, current state:', isMicOn);
-        setIsMicOn((prev) => !prev);
-        if (call) {
-            const localFeed = call.getLocalFeeds()[0];
-            if (localFeed) {
-                const audioTracks = localFeed.stream.getAudioTracks();
-                audioTracks.forEach((track) => {
-                    track.enabled = isMicOn; // Enable mic when isMicOn is true
-                    console.log('Mic track enabled:', track.enabled);
-                });
+        setIsMicOn((prev) => {
+            const newMicState = !prev; // Trạng thái mới của micro
+            if (call) {
+                const localFeed = call.getLocalFeeds()[0];
+                if (localFeed) {
+                    const audioTracks = localFeed.stream.getAudioTracks();
+                    audioTracks.forEach((track) => {
+                        track.enabled = newMicState; // Sử dụng trạng thái mới
+                        console.log('Mic track enabled:', track.enabled);
+                    });
+                }
             }
-        }
+            return newMicState; // Trả về trạng thái mới để cập nhật isMicOn
+        });
     };
 
     const isConnected = callState === 'connected';
@@ -239,7 +242,7 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
                                 d={
                                     isMicOn
                                         ? 'M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z'
-                                        : 'M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-5-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3zM5 5l14 14'
+                                        : 'M19 11a7 7 0 01-7-7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-5-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3zM5 5l14 14'
                                 }
                             />
                         </svg>

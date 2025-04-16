@@ -312,40 +312,40 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
         }
     };
 
-    const handleStartVideoCall = async () => {
-        try {
-            await chatService.waitForSync(120000);
-            const call = await callService.startVideoCall(roomId);
-            console.log('Started video call:', call);
-            setActiveCall(call);
-            setShowVideoCall(true);
-            setIsCaller(true);
+    // const handleStartVideoCall = async () => {
+    //     try {
+    //         await chatService.waitForSync(120000);
+    //         const call = await callService.startVideoCall(roomId);
+    //         console.log('Started video call:', call);
+    //         setActiveCall(call);
+    //         setShowVideoCall(true);
+    //         setIsCaller(true);
 
-            const room = matrixClient.getRoom(roomId);
-            let receiverDisplayName = 'Người dùng không xác định';
-            let callerDisplayName = 'Người dùng không xác định';
-            const currentUserId = matrixClient.getUserId();
-            if (currentUserId) {
-                callerDisplayName = matrixClient.getUser(currentUserId)?.displayName || currentUserId || 'Bạn';
-            }
-            if (room) {
-                const members = room.getJoinedMembers();
-                const otherMembers = currentUserId
-                    ? members.filter(member => member.userId !== currentUserId)
-                    : members;
-                if (otherMembers.length === 1) {
-                    receiverDisplayName = otherMembers[0].name || otherMembers[0].userId;
-                } else {
-                    receiverDisplayName = room.name || 'Cuộc gọi nhóm';
-                }
-            }
-            console.log('Video call initiated:', { callerDisplayName, receiverDisplayName, isCaller: true });
-            setCallerName(callerDisplayName);
-            setReceiverName(receiverDisplayName);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Không thể bắt đầu cuộc gọi.');
-        }
-    };
+    //         const room = matrixClient.getRoom(roomId);
+    //         let receiverDisplayName = 'Người dùng không xác định';
+    //         let callerDisplayName = 'Người dùng không xác định';
+    //         const currentUserId = matrixClient.getUserId();
+    //         if (currentUserId) {
+    //             callerDisplayName = matrixClient.getUser(currentUserId)?.displayName || currentUserId || 'Bạn';
+    //         }
+    //         if (room) {
+    //             const members = room.getJoinedMembers();
+    //             const otherMembers = currentUserId
+    //                 ? members.filter(member => member.userId !== currentUserId)
+    //                 : members;
+    //             if (otherMembers.length === 1) {
+    //                 receiverDisplayName = otherMembers[0].name || otherMembers[0].userId;
+    //             } else {
+    //                 receiverDisplayName = room.name || 'Cuộc gọi nhóm';
+    //             }
+    //         }
+    //         console.log('Video call initiated:', { callerDisplayName, receiverDisplayName, isCaller: true });
+    //         setCallerName(callerDisplayName);
+    //         setReceiverName(receiverDisplayName);
+    //     } catch (err) {
+    //         setError(err instanceof Error ? err.message : 'Không thể bắt đầu cuộc gọi.');
+    //     }
+    // };
 
     const currentUserId = matrixClient.getUserId();
     if (!currentUserId) {
@@ -383,7 +383,7 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
                             </svg>
                         </button>
                         <button
-                            onClick={handleStartVideoCall}
+                            // onClick={handleStartVideoCall}
                             className="text-gray-600 hover:text-gray-800"
                             title="Cuộc gọi video"
                         >
