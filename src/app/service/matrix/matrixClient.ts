@@ -1,6 +1,6 @@
 // matrixClient.ts
 import { createClient, MatrixClient, SyncState, ClientEvent } from "matrix-js-sdk";
-import { MATRIX_CONFIG } from "@/app/utils/config";
+import { MATRIX_CONFIG } from "@/app/service/utils/config";
 
 export class MatrixClientManager {
   private static client: MatrixClient | null = null;

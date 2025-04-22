@@ -1,6 +1,6 @@
 // roomService.ts
 import { MatrixClient, ICreateRoomOpts, Preset, Visibility, Room } from "matrix-js-sdk";
-import authService from "@/app/utils/authService";
+import authService from "@/app/service/auth/authService";
 
 export interface RoomData {
   roomId: string;

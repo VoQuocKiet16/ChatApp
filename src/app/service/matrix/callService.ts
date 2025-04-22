@@ -2,12 +2,9 @@ import { MatrixClient, MatrixCall, createNewMatrixCall } from 'matrix-js-sdk';
 import { CallErrorCode, CallEvent, CallState } from 'matrix-js-sdk/lib/webrtc/call';
 import { CallEventHandlerEvent } from 'matrix-js-sdk/lib/webrtc/callEventHandler';
 
+export type CallType = 'voice' | 'video';
 
-
-export class VoiceCallService {
-    static hangupCall() {
-        throw new Error('Method not implemented.');
-    }
+export class CallService {
     private matrixClient: MatrixClient;
     private activeCall: MatrixCall | null = null;
     private callStartTime: number | null = null;
@@ -21,49 +18,51 @@ export class VoiceCallService {
         this.matrixClient = matrixClient;
     }
 
-    async startVoiceCall(roomId: string): Promise<MatrixCall> {
-        console.log('Starting voice call for room:', roomId);
+    async startCall(roomId: string, type: CallType): Promise<MatrixCall> {
+        console.log(`Starting ${type} call for room:`, roomId);
         this.cleanupCall();
         const newCall = createNewMatrixCall(this.matrixClient, roomId);
         if (!newCall) {
-            throw new Error('Không thể tạo cuộc gọi thoại: createNewMatrixCall trả về null');
+            throw new Error(`Không thể tạo cuộc gọi ${type}: createNewMatrixCall trả về null`);
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            console.log('Microphone stream obtained:', stream.id);
-            // newCall.setLocalAudioVideoStream(stream); // Explicitly set stream
+            const constraints = type === 'voice' ? { audio: true } : { audio: true, video: true };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('Media stream obtained:', stream.id);
         } catch (err) {
-            throw new Error('Không thể truy cập micro: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
+            throw new Error(`Không thể truy cập thiết bị: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`);
         }
-        newCall.placeVoiceCall();
+        if (type === 'voice') {
+            newCall.placeVoiceCall();
+        } else {
+            newCall.placeVideoCall();
+        }
         this.activeCall = newCall;
         this.setupCallListeners(newCall);
         return newCall;
     }
 
-
     async answerCall(call: MatrixCall): Promise<void> {
-        console.log('Answering call:', call.callId);
+        console.log(`Answering ${call.type} call:`, call.callId);
         this.cleanupCall();
-        const isVoiceCall = call.type === 'voice';
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !isVoiceCall });
+            const constraints = call.type === 'voice' ? { audio: true } : { audio: true, video: true };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             console.log('Media stream obtained for answering:', stream.id);
-            // call.setLocalAudioVideoStream(stream); // Explicitly set stream
         } catch (err) {
-            throw new Error('Không thể truy cập thiết bị: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
+            throw new Error(`Không thể truy cập thiết bị: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`);
         }
         call.answer();
         this.activeCall = call;
         this.setupCallListeners(call);
     }
-    
+
     hangupCall(): void {
         if (!this.activeCall) {
             console.log('No active call to hang up');
             return;
         }
-        const callId = this.activeCall.callId; // Lưu callId để tránh race condition
+        const callId = this.activeCall.callId;
         console.log(`Attempting to hangup call, activeCall: ${callId}`);
         try {
             console.log(`Call ${callId} hangup() ending call (reason=user_hangup)`);
@@ -136,7 +135,7 @@ export class VoiceCallService {
 
     private setupCallListeners(call: MatrixCall): void {
         console.log('Setting up call listeners for call:', call.callId);
-    
+
         const onStateChange = (state: string) => {
             console.log('Call state changed:', state, 'for call:', call.callId);
             if (state === CallState.Connected && !this.isConnected) {
@@ -153,7 +152,7 @@ export class VoiceCallService {
                 this.cleanupCall();
             }
         };
-    
+
         const onFeedsChanged = () => {
             const remoteStream = call.getRemoteFeeds()[0]?.stream;
             console.log('Feeds changed, remote stream:', remoteStream ? 'exists' : 'not exists', 'for call:', call.callId);
@@ -165,23 +164,22 @@ export class VoiceCallService {
                 this.startDurationTimer();
             }
         };
-    
+
         const onHangup = () => {
             console.log('Received Hangup event for call:', call.callId);
             this.cleanupCall();
         };
-    
+
         const onError = (err: Error) => {
             console.error('Call error for call:', call.callId, 'error:', err.message);
             this.cleanupCall();
         };
-    
+
         call.on(CallEvent.State, onStateChange);
         call.on(CallEvent.FeedsChanged, onFeedsChanged);
         call.on(CallEvent.Hangup, onHangup);
         call.on(CallEvent.Error, onError);
-    
-        // Set timeout to hang up only if the call is not connected
+
         this.timeoutId = setTimeout(() => {
             if (!this.isConnected && this.activeCall) {
                 console.warn('Call timeout, forcing hangup for call:', call.callId, 'state:', call.state);
@@ -190,7 +188,7 @@ export class VoiceCallService {
                 console.log('Call is connected or already ended, skipping timeout hangup for call:', call.callId);
             }
         }, 60000);
-    
+
         call.on(CallEvent.Hangup, () => {
             if (this.timeoutId) {
                 clearTimeout(this.timeoutId);
@@ -218,12 +216,12 @@ export class VoiceCallService {
             clearInterval(this.durationTimer);
             this.durationTimer = null;
         }
-
+    
         if (!this.isConnected || !this.activeCall) {
             console.log('Not starting duration timer: call is not connected or no active call');
             return;
         }
-
+    
         this.durationTimer = setInterval(() => {
             console.log('Timer tick, checking conditions:', {
                 callStartTime: !!this.callStartTime,
@@ -283,3 +281,6 @@ export class VoiceCallService {
         return this.activeCall;
     }
 }
+
+
+

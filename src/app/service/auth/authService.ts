@@ -1,7 +1,7 @@
 // authService.ts
 import { MatrixClient, createClient } from "matrix-js-sdk";
-import { MATRIX_CONFIG } from "@/app/utils/config";
-import { MatrixClientManager } from "@/app/utils/matrixClient";
+import { MATRIX_CONFIG } from "@/app/service/utils/config";
+import { MatrixClientManager } from "@/app/service/matrix/matrixClient";
 
 // Singleton class để quản lý phiên đăng nhập
 class AuthService {

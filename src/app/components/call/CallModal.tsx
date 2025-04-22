@@ -1,24 +1,15 @@
-// CallModal.tsx
-'use client';
+import React from 'react';
 import { MatrixCall } from 'matrix-js-sdk';
-import { VideoCallService } from '@/app/utils/videoCallService';
-import { VoiceCallService } from '@/app/utils/voiceCallService';
+import useCall  from '@/app/hooks/useCall';
 
 interface CallModalProps {
     incomingCall: MatrixCall | null;
     callerName: string;
-    voiceCallService: VoiceCallService; // Add voiceCallService prop
-    videoCallService: VideoCallService; // Add videoCallService prop
-    onAcceptCall: (call: MatrixCall) => void; // Update to pass call
-    onRejectCall: (call: MatrixCall) => void; // Update to pass call
 }
 
-const CallModal: React.FC<CallModalProps> = ({
-    incomingCall,
-    callerName,
-    onAcceptCall,
-    onRejectCall,
-}) => {
+const CallModal: React.FC<CallModalProps> = ({ incomingCall, callerName }) => {
+    const { answerCall, rejectCall } = useCall();
+
     if (!incomingCall) return null;
 
     return (
@@ -31,13 +22,13 @@ const CallModal: React.FC<CallModalProps> = ({
                 </h3>
                 <div className="flex space-x-4">
                     <button
-                        onClick={() => onAcceptCall(incomingCall)}
+                        onClick={() => answerCall(incomingCall)}
                         className="bg-green-500 text-white rounded-lg p-3 hover:bg-green-600 transition"
                     >
                         Chấp nhận
                     </button>
                     <button
-                        onClick={() => onRejectCall(incomingCall)}
+                        onClick={() => rejectCall(incomingCall)}
                         className="bg-red-500 text-white rounded-lg p-3 hover:bg-red-600 transition"
                     >
                         Từ chối

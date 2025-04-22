@@ -11,8 +11,8 @@ import {
   MatrixClient,
   SyncStateData,
 } from "matrix-js-sdk";
-import authService from "@/app/utils/authService";
-import { MATRIX_CONFIG } from "@/app/utils/config";
+import authService from "@/app/service/auth/authService";
+import { MATRIX_CONFIG } from "@/app/service/utils/config";
 
 export interface ChatMessage {
   sender: string;

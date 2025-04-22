@@ -3,9 +3,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import authService from '@/app/utils/authService';
+import authService from '@/app/service/auth/authService';
 import { MatrixClient } from 'matrix-js-sdk';
-import Footer from '@/app/components/Footer'; 
+import Footer from '@/app/components/common/Footer'; 
 
 const ProfilePage = () => {
   const router = useRouter();

@@ -2,14 +2,14 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import authService from '@/app/utils/authService';
-import roomService from '@/app/utils/roomService';
-import chatService from '@/app/utils/chatService';
-import { withErrorHandling } from '@/app/utils/withErrorHandling';
-import Header from '@/app/components/Header';
-import Footer from '@/app/components/Footer';
-import ChatItem from '@/app/components/ChatItem';
-import CreateRoomModal from '@/app/components/CreateRoomModal';
+import authService from '@/app/service/auth/authService';
+import roomService from '@/app/service/matrix/roomService';
+import chatService from '@/app/service/matrix/chatService';
+import { withErrorHandling } from '@/app/service/utils/withErrorHandling';
+import Header from '@/app/components/common/Header';
+import Footer from '@/app/components/common/Footer';
+import ChatItem from '@/app/components/chat/ChatItem';
+import CreateRoomModal from '@/app/components/room/CreateRoomModal';
 import { MatrixEvent } from 'matrix-js-sdk';
 
 interface Room {

@@ -1,8 +1,8 @@
 // ChatItem.tsx
 import React from 'react';
 import Image from 'next/image';
-import GroupIcon from './GroupIcon';
-import UserAvatar from './UserAvatar';
+import GroupIcon from '../common/GroupIcon';
+import UserAvatar from '../common/UserAvatar';
 
 interface ChatItemProps {
   avatar?: string;
