@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { MatrixClient, MatrixCall, RoomMember, MatrixEvent, Room, CallEvent } from 'matrix-js-sdk';
 import chatService, { ChatMessage } from '@/app/utils/chatService';
 import roomService from '@/app/utils/roomService';
-import { CallService } from '@/app/utils/callService';
+import { VoiceCallService } from '@/app/utils/voiceCallService';
+import { VideoCallService } from '@/app/utils/videoCallService';
 import { withErrorHandling } from '@/app/utils/withErrorHandling';
 import VoiceCall from '@/app/components/VoiceCall';
 import VideoCall from '@/app/components/VideoCall';
@@ -36,7 +37,8 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
     const [receiverName, setReceiverName] = useState<string>('Người dùng không xác định');
     const [isCaller, setIsCaller] = useState<boolean>(false);
 
-    const callService = useMemo(() => new CallService(matrixClient), [matrixClient]);
+    const voiceCallService = useMemo(() => new VoiceCallService(matrixClient), [matrixClient]);
+    const videoCallService = useMemo(() => new VideoCallService(matrixClient), [matrixClient]);
 
     const fetchRoomData = async () => {
         try {
@@ -152,7 +154,7 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
                 }
             }
 
-            console.log('Incoming call:', { callId: call.callId, callerDisplayName, receiverDisplayName });
+            console.log('Incoming call:', { callId: call.callId, callerDisplayName, receiverDisplayName, callType: call.type });
             setCallerName(callerDisplayName);
             setReceiverName(receiverDisplayName);
             setIsCaller(false);
@@ -176,15 +178,21 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
             });
         };
 
-        callService.onIncomingCall(handleIncomingCall);
+        // Register listeners for both voice and video calls
+        const removeVoiceCallListener = voiceCallService.onIncomingCall(handleIncomingCall);
+        const removeVideoCallListener = videoCallService.onIncomingCall(handleIncomingCall);
 
         return () => {
-            callService.removeIncomingCallListener(handleIncomingCall);
-            if (!callService.getActiveCall()) {
-                callService.hangupCall();
+            removeVoiceCallListener();
+            removeVideoCallListener();
+            if (!voiceCallService.getActiveCall()) {
+                voiceCallService.hangupCall();
+            }
+            if (!videoCallService.getActiveCall()) {
+                videoCallService.hangupCall();
             }
         };
-    }, [callService, matrixClient, roomId]);
+    }, [voiceCallService, videoCallService, matrixClient, roomId]);
 
     const handleSendMessage = async () => {
         if (!messageText.trim()) return;
@@ -240,34 +248,43 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
         });
     };
 
-    const handleAcceptCall = async () => {
-        if (!incomingCall) return;
-        await withErrorHandling(
-            () => callService.answerCall(incomingCall),
-            'Không thể chấp nhận cuộc gọi.',
-            setError
-        ).then(() => {
-            console.log('Accepted call:', incomingCall.callId);
-            setActiveCall(incomingCall);
-            if (incomingCall.type === 'voice') {
+    const handleAcceptCall = async (call: MatrixCall) => {
+        if (!call) return;
+        try {
+            if (call.type === 'voice') {
+                await voiceCallService.answerCall(call);
+                console.log('Accepted voice call:', call.callId);
+                setActiveCall(call);
                 setShowVoiceCall(true);
                 setShowVideoCall(false);
-            } else {
+            } else if (call.type === 'video') {
+                await videoCallService.answerCall(call);
+                console.log('Accepted video call:', call.callId);
+                setActiveCall(call);
                 setShowVideoCall(true);
                 setShowVoiceCall(false);
             }
             setIncomingCall(null);
             setIsCaller(false);
-        }).catch(() => {
-            callService.rejectCall(incomingCall);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Không thể chấp nhận cuộc gọi.');
+            if (call.type === 'voice') {
+                voiceCallService.rejectCall(call);
+            } else {
+                videoCallService.rejectCall(call);
+            }
             setIncomingCall(null);
-        });
+        }
     };
 
-    const handleRejectCall = () => {
-        if (!incomingCall) return;
-        console.log('Rejected call:', incomingCall.callId);
-        callService.rejectCall(incomingCall);
+    const handleRejectCall = (call: MatrixCall) => {
+        if (!call) return;
+        console.log('Rejected call:', call.callId, 'type:', call.type);
+        if (call.type === 'voice') {
+            voiceCallService.rejectCall(call);
+        } else {
+            videoCallService.rejectCall(call);
+        }
         setIncomingCall(null);
     };
 
@@ -280,8 +297,8 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
     const handleStartVoiceCall = async () => {
         try {
             await chatService.waitForSync(120000);
-            const call = await callService.startVoiceCall(roomId);
-            console.log('Started voice call:', call);
+            const call = await voiceCallService.startVoiceCall(roomId);
+            console.log('Started voice call:', call.callId);
             setActiveCall(call);
             setShowVoiceCall(true);
             setIsCaller(true);
@@ -312,40 +329,40 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
         }
     };
 
-    // const handleStartVideoCall = async () => {
-    //     try {
-    //         await chatService.waitForSync(120000);
-    //         const call = await callService.startVideoCall(roomId);
-    //         console.log('Started video call:', call);
-    //         setActiveCall(call);
-    //         setShowVideoCall(true);
-    //         setIsCaller(true);
+    const handleStartVideoCall = async () => {
+        try {
+            await chatService.waitForSync(120000);
+            const call = await videoCallService.startVideoCall(roomId);
+            console.log('Started video call:', call.callId);
+            setActiveCall(call);
+            setShowVideoCall(true);
+            setIsCaller(true);
 
-    //         const room = matrixClient.getRoom(roomId);
-    //         let receiverDisplayName = 'Người dùng không xác định';
-    //         let callerDisplayName = 'Người dùng không xác định';
-    //         const currentUserId = matrixClient.getUserId();
-    //         if (currentUserId) {
-    //             callerDisplayName = matrixClient.getUser(currentUserId)?.displayName || currentUserId || 'Bạn';
-    //         }
-    //         if (room) {
-    //             const members = room.getJoinedMembers();
-    //             const otherMembers = currentUserId
-    //                 ? members.filter(member => member.userId !== currentUserId)
-    //                 : members;
-    //             if (otherMembers.length === 1) {
-    //                 receiverDisplayName = otherMembers[0].name || otherMembers[0].userId;
-    //             } else {
-    //                 receiverDisplayName = room.name || 'Cuộc gọi nhóm';
-    //             }
-    //         }
-    //         console.log('Video call initiated:', { callerDisplayName, receiverDisplayName, isCaller: true });
-    //         setCallerName(callerDisplayName);
-    //         setReceiverName(receiverDisplayName);
-    //     } catch (err) {
-    //         setError(err instanceof Error ? err.message : 'Không thể bắt đầu cuộc gọi.');
-    //     }
-    // };
+            const room = matrixClient.getRoom(roomId);
+            let receiverDisplayName = 'Người dùng không xác định';
+            let callerDisplayName = 'Người dùng không xác định';
+            const currentUserId = matrixClient.getUserId();
+            if (currentUserId) {
+                callerDisplayName = matrixClient.getUser(currentUserId)?.displayName || currentUserId || 'Bạn';
+            }
+            if (room) {
+                const members = room.getJoinedMembers();
+                const otherMembers = currentUserId
+                    ? members.filter(member => member.userId !== currentUserId)
+                    : members;
+                if (otherMembers.length === 1) {
+                    receiverDisplayName = otherMembers[0].name || otherMembers[0].userId;
+                } else {
+                    receiverDisplayName = room.name || 'Cuộc gọi nhóm';
+                }
+            }
+            console.log('Video call initiated:', { callerDisplayName, receiverDisplayName, isCaller: true });
+            setCallerName(callerDisplayName);
+            setReceiverName(receiverDisplayName);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Không thể bắt đầu cuộc gọi video.');
+        }
+    };
 
     const currentUserId = matrixClient.getUserId();
     if (!currentUserId) {
@@ -383,7 +400,7 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
                             </svg>
                         </button>
                         <button
-                            // onClick={handleStartVideoCall}
+                            onClick={handleStartVideoCall}
                             className="text-gray-600 hover:text-gray-800"
                             title="Cuộc gọi video"
                         >
@@ -411,12 +428,12 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
                     </div>
                 ) : showVoiceCall ? (
                     <VoiceCall
-                        callService={callService}
+                        VoiceCallService={voiceCallService}
                         roomId={roomId}
                         onEndCall={() => {
                             setShowVoiceCall(false);
                             setActiveCall(null);
-                            callService.hangupCall();
+                            voiceCallService.hangupCall();
                             setIsCaller(false);
                         }}
                         activeCall={activeCall}
@@ -426,15 +443,18 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
                     />
                 ) : showVideoCall ? (
                     <VideoCall
-                        callService={callService}
+                        videoCallService={videoCallService}
                         roomId={roomId}
                         onEndCall={() => {
                             setShowVideoCall(false);
                             setActiveCall(null);
-                            callService.hangupCall();
+                            videoCallService.hangupCall();
                             setIsCaller(false);
                         }}
                         activeCall={activeCall}
+                        callerName={callerName}
+                        receiverName={receiverName}
+                        isCaller={isCaller}
                     />
                 ) : (
                     <>
@@ -488,6 +508,8 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
             <CallModal
                 incomingCall={incomingCall}
                 callerName={callerName}
+                voiceCallService={voiceCallService}
+                videoCallService={videoCallService}
                 onAcceptCall={handleAcceptCall}
                 onRejectCall={handleRejectCall}
             />

@@ -4,7 +4,10 @@ import { CallEventHandlerEvent } from 'matrix-js-sdk/lib/webrtc/callEventHandler
 
 
 
-export class CallService {
+export class VoiceCallService {
+    static hangupCall() {
+        throw new Error('Method not implemented.');
+    }
     private matrixClient: MatrixClient;
     private activeCall: MatrixCall | null = null;
     private callStartTime: number | null = null;
@@ -38,25 +41,6 @@ export class CallService {
         return newCall;
     }
 
-    // async startVideoCall(roomId: string): Promise<MatrixCall> {
-    //     console.log('Starting video call for room:', roomId);
-    //     this.cleanupCall();
-    //     const newCall = createNewMatrixCall(this.matrixClient, roomId);
-    //     if (!newCall) {
-    //         throw new Error('Không thể tạo cuộc gọi video: createNewMatrixCall trả về null');
-    //     }
-    //     try {
-    //         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    //         console.log('Camera and microphone stream obtained:', stream.id);
-    //         newCall.setLocalAudioVideoStream(stream); // Explicitly set stream
-    //     } catch (err) {
-    //         throw new Error('Không thể truy cập camera/micro: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
-    //     }
-    //     newCall.placeVideoCall();
-    //     this.activeCall = newCall;
-    //     this.setupCallListeners(newCall);
-    //     return newCall;
-    // }
 
     async answerCall(call: MatrixCall): Promise<void> {
         console.log('Answering call:', call.callId);
@@ -152,7 +136,7 @@ export class CallService {
 
     private setupCallListeners(call: MatrixCall): void {
         console.log('Setting up call listeners for call:', call.callId);
-
+    
         const onStateChange = (state: string) => {
             console.log('Call state changed:', state, 'for call:', call.callId);
             if (state === CallState.Connected && !this.isConnected) {
@@ -169,7 +153,7 @@ export class CallService {
                 this.cleanupCall();
             }
         };
-
+    
         const onFeedsChanged = () => {
             const remoteStream = call.getRemoteFeeds()[0]?.stream;
             console.log('Feeds changed, remote stream:', remoteStream ? 'exists' : 'not exists', 'for call:', call.callId);
@@ -181,29 +165,32 @@ export class CallService {
                 this.startDurationTimer();
             }
         };
-
+    
         const onHangup = () => {
             console.log('Received Hangup event for call:', call.callId);
             this.cleanupCall();
         };
-
+    
         const onError = (err: Error) => {
             console.error('Call error for call:', call.callId, 'error:', err.message);
             this.cleanupCall();
         };
-
+    
         call.on(CallEvent.State, onStateChange);
         call.on(CallEvent.FeedsChanged, onFeedsChanged);
         call.on(CallEvent.Hangup, onHangup);
         call.on(CallEvent.Error, onError);
-
+    
+        // Set timeout to hang up only if the call is not connected
         this.timeoutId = setTimeout(() => {
-            if (this.isConnected || this.activeCall) {
-                console.warn('Call timeout, forcing hangup for call:', call.callId);
+            if (!this.isConnected && this.activeCall) {
+                console.warn('Call timeout, forcing hangup for call:', call.callId, 'state:', call.state);
                 this.hangupCall();
+            } else {
+                console.log('Call is connected or already ended, skipping timeout hangup for call:', call.callId);
             }
         }, 60000);
-
+    
         call.on(CallEvent.Hangup, () => {
             if (this.timeoutId) {
                 clearTimeout(this.timeoutId);

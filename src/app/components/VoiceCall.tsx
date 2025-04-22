@@ -2,10 +2,10 @@
 'use client';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { MatrixCall, CallEvent } from 'matrix-js-sdk';
-import { CallService } from '@/app/utils/callService';
+import { VoiceCallService } from '@/app/utils/voiceCallService';
 
 interface VoiceCallProps {
-    callService: CallService;
+    VoiceCallService: VoiceCallService;
     roomId: string;
     onEndCall?: () => void;
     activeCall?: MatrixCall | null;
@@ -15,7 +15,7 @@ interface VoiceCallProps {
 }
 
 const VoiceCall: React.FC<VoiceCallProps> = ({
-    callService,
+    VoiceCallService,
     onEndCall,
     activeCall,
     callerName = 'Unknown User',
@@ -51,15 +51,15 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
             }
         };
 
-        const removeDurationListener = callService.onCallDuration(handleDurationUpdate);
-        const removeStateListener = callService.onCallState(handleStateUpdate);
+        const removeDurationListener = VoiceCallService.onCallDuration(handleDurationUpdate);
+        const removeStateListener = VoiceCallService.onCallState(handleStateUpdate);
 
         return () => {
             console.log('VoiceCall cleanup listeners');
             removeDurationListener();
             removeStateListener();
         };
-    }, [callService]);
+    }, [VoiceCallService]);
 
     const cleanupCallState = useCallback(() => {
         console.log('Cleaning up call state in VoiceCall');
@@ -72,9 +72,9 @@ const VoiceCall: React.FC<VoiceCallProps> = ({
             remoteAudioRef.current.pause(); // Ensure playback stops
         }
         currentStreamId.current = null; // Reset stream tracking
-        callService.hangupCall();
+        VoiceCallService.hangupCall();
         onEndCall?.();
-    }, [callService, onEndCall]);
+    }, [VoiceCallService, onEndCall]);
 
     const playRemoteAudio = useCallback(() => {
         if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
