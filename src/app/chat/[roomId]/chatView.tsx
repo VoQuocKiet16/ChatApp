@@ -188,7 +188,7 @@ const ChatView: React.FC<ChatViewProps> = ({ matrixClient, roomId }) => {
     const currentUserId = matrixClient.getUserId();
     if (!currentUserId) {
         console.warn('No user logged in, redirecting to login');
-        router.push('/login');
+        router.push('/auth/login');
         return null;
     }
 

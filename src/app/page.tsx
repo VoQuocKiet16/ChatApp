@@ -10,7 +10,7 @@ export default function Home() {
             <span className="text-xl font-bold text-gray-900 dark:text-white">ChatSphere</span>
           </div>
           <Link
-            href="/login"
+            href="/auth/login"
             className="px-6 py-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors duration-200 font-medium"
           >
             Login

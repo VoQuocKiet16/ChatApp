@@ -31,7 +31,7 @@ const ProfilePage = () => {
       } catch (err) {
         console.error("Lỗi khi tải thông tin người dùng:", err);
         setError("Không thể tải thông tin người dùng. Vui lòng thử lại.");
-        router.push('/login');
+        router.push('/auth/login');
       } finally {
         setLoading(false);
       }
@@ -44,7 +44,7 @@ const ProfilePage = () => {
     try {
       await authService.logout();
       alert("Đăng xuất thành công!");
-      router.push("/login");
+      router.push("/auth/login");
     } catch (err) {
       console.error("Lỗi khi đăng xuất:", err);
       setError("Đăng xuất thất bại. Vui lòng thử lại!");

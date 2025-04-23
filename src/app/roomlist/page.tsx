@@ -36,7 +36,7 @@ const RoomList: React.FC = () => {
         await authService.getAuthenticatedClient();
       } catch (err) {
         console.log("Chưa đăng nhập hoặc token hết hạn, chuyển hướng về trang đăng nhập.", err);
-        router.push("/login");
+        router.push("/auth/login");
       }
     };
 

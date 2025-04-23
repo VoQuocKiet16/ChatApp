@@ -16,7 +16,7 @@ const Footer = () => {
   const ROUTES = {
     CONTACTS: '/contacts',
     CHATS: '/roomlist',
-    SETTINGS: '/profile',
+    SETTINGS: 'auth/profile',
   } as const;
 
   // Xác định trạng thái active dựa trên pathname
