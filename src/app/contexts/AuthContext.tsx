@@ -2,7 +2,7 @@
 'use client';
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { MatrixClient } from 'matrix-js-sdk';
-import authService from '@/app/service/auth/authService';
+import authService from '@/app/services/auth/authService';
 
 interface AuthContextType {
   matrixClient: MatrixClient | null;

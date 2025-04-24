@@ -1,4 +1,3 @@
-// chatService.ts
 import {
   ClientEvent,
   Room,
@@ -11,14 +10,16 @@ import {
   MatrixClient,
   SyncStateData,
 } from "matrix-js-sdk";
-import authService from "@/app/service/auth/authService";
-import { MATRIX_CONFIG } from "@/app/service/utils/config";
+import authService from "@/app/services/auth/authService";
+import { MATRIX_CONFIG } from "@/app/services/utils/config";
+import { formatTimestamp } from "@/app/services/utils/dateUtils";
+import { RoomData } from "@/app/services/matrix/roomService";
 
 export interface ChatMessage {
   sender: string;
   body: string;
   eventId: string;
-  avatarUrl?: string | null | undefined; // Chấp nhận cả `null`
+  avatarUrl?: string | null | undefined;
   timestamp: number;
 }
 
@@ -29,16 +30,22 @@ export class ChatService {
     return await authService.getAuthenticatedClient();
   }
 
+  /**
+   * Waits for the Matrix client to complete synchronization.
+   * @param timeoutMs Timeout in milliseconds.
+   * @returns Promise that resolves when sync is complete.
+   */
   async waitForSync(
     timeoutMs: number = MATRIX_CONFIG.SYNC_TIMEOUT_MS
   ): Promise<void> {
     const client = await this.getClient();
     return new Promise((resolve, reject) => {
+      const currentState = client.getSyncState();
       if (
-        client.getSyncState() === SyncState.Prepared ||
-        client.getSyncState() === SyncState.Syncing
+        currentState === SyncState.Prepared ||
+        currentState === SyncState.Syncing
       ) {
-        console.log("Matrix client đã sẵn sàng hoặc đang đồng bộ.");
+        console.log(`Matrix client đang ở trạng thái ${currentState}.`);
         resolve();
         return;
       }
@@ -56,7 +63,7 @@ export class ChatService {
           console.log("Đồng bộ hoàn tất hoặc đang đồng bộ.");
           resolve();
           client.removeListener(ClientEvent.Sync, syncListener);
-        } else if (state === SyncState.Error) {
+        } else if (state === SyncState.Error || state === SyncState.Stopped) {
           console.error(
             "Lỗi đồng bộ:",
             data?.error || "Không có thông tin lỗi"
@@ -109,8 +116,13 @@ export class ChatService {
     limit: number
   ): Promise<MatrixEvent[]> {
     const client = await this.getClient();
-    const scrollbackEvents = await client.scrollback(room, limit);
-    return Array.isArray(scrollbackEvents) ? scrollbackEvents : [];
+    try {
+      const scrollbackEvents = await client.scrollback(room, limit);
+      return Array.isArray(scrollbackEvents) ? scrollbackEvents : [];
+    } catch (err) {
+      console.error(`Lỗi khi lấy scrollback cho phòng ${room.roomId}:`, err);
+      return [];
+    }
   }
 
   private dedupeEvents(events: MatrixEvent[]): MatrixEvent[] {
@@ -243,6 +255,71 @@ export class ChatService {
     const client = await this.getClient();
     client.on(ClientEvent.Sync, callback);
     return () => client.removeListener(ClientEvent.Sync, callback);
+  }
+
+  /**
+   * Processes a new message event and returns updated room data.
+   * @param event The Matrix event to process.
+   * @param room The room associated with the event.
+   * @param client The Matrix client instance.
+   * @returns Updated room data or null if the event is not a message.
+   */
+  async processNewMessage(
+    event: MatrixEvent,
+    room: Room,
+    client: MatrixClient
+  ): Promise<Partial<RoomData> | null> {
+    if (event.getType() !== 'm.room.message') return null;
+    const roomId = event.getRoomId();
+    if (!roomId) return null;
+
+    const content = event.getContent();
+    const senderId = event.getSender();
+    const senderName = senderId ? client.getUser(senderId)?.displayName || senderId : 'Unknown';
+
+    return {
+      roomId,
+      lastMessage: content.body || 'Tin nhắn không có nội dung',
+      timestamp: formatTimestamp(event.getTs()),
+      ts: event.getTs(),
+      sender: senderName,
+    };
+  }
+
+  /**
+   * Processes a new chat message event and returns a ChatMessage object.
+   * @param event The Matrix event to process.
+   * @param client The Matrix client instance.
+   * @returns ChatMessage object or null if the event is not a message.
+   */
+  async processChatMessage(
+    event: MatrixEvent,
+    client: MatrixClient
+  ): Promise<ChatMessage | null> {
+    if (event.getType() !== 'm.room.message') return null;
+    const senderId = event.getSender();
+    if (!senderId) return null;
+
+    let avatarUrl: string | null | undefined;
+    try {
+      const profile = await client.getProfileInfo(senderId);
+      avatarUrl = profile.avatar_url ? client.mxcUrlToHttp(profile.avatar_url) : undefined;
+    } catch (err) {
+      console.error(`Lỗi khi lấy avatar cho ${senderId}:`, err);
+    }
+
+    const timestamp = event.getTs();
+    if (typeof timestamp !== 'number' || isNaN(timestamp)) {
+      console.warn(`Timestamp không hợp lệ cho sự kiện ${event.getId()}:`, timestamp);
+    }
+
+    return {
+      sender: senderId,
+      body: event.getContent()?.body || '',
+      eventId: event.getId() || `msg-${Date.now()}`,
+      avatarUrl,
+      timestamp: typeof timestamp === 'number' && !isNaN(timestamp) ? timestamp : Date.now(),
+    };
   }
 }
 

@@ -2,112 +2,101 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import authService from '@/app/service/auth/authService';
-import roomService from '@/app/service/matrix/roomService';
-import chatService from '@/app/service/matrix/chatService';
-import { withErrorHandling } from '@/app/service/utils/withErrorHandling';
+import authService from '@/app/services/auth/authService';
+import roomService from '@/app/services/matrix/roomService';
+import chatService from '@/app/services/matrix/chatService';
+import { withErrorHandling } from '@/app/services/utils/withErrorHandling';
+import { ERROR_MESSAGES } from '@/app/services/utils/matrix';
+import { sortRoomsByTimestamp } from '@/app/services/utils/roomUtils';
 import Header from '@/app/components/common/Header';
 import Footer from '@/app/components/common/Footer';
 import ChatItem from '@/app/components/chat/ChatItem';
 import CreateRoomModal from '@/app/components/room/CreateRoomModal';
-import { MatrixEvent } from 'matrix-js-sdk';
+import { MatrixEvent, Room } from 'matrix-js-sdk';
+import { RoomData } from '@/app/services/matrix/roomService';
 
-interface Room {
-  roomId: string;
-  name: string;
-  lastMessage?: string;
-  timestamp?: string;
-  ts?: number;
-  sender?: string;
-  isGroup?: boolean;
-}
-
+/**
+ * RoomList component displays a list of chat rooms and handles room creation and new message updates.
+ */
 const RoomList: React.FC = () => {
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<RoomData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isClientReady, setIsClientReady] = useState(false);
   const router = useRouter();
 
-  // Kiểm tra trạng thái đăng nhập khi component mount
+  // Check login status and client sync state
   useEffect(() => {
-    const checkLoginStatus = async () => {
+    const checkLoginAndSync = async () => {
       try {
         await authService.getAuthenticatedClient();
+        setIsClientReady(true);
       } catch (err) {
-        console.log("Chưa đăng nhập hoặc token hết hạn, chuyển hướng về trang đăng nhập.", err);
-        router.push("/auth/login");
+        console.error('Lỗi khi kiểm tra đăng nhập hoặc đồng bộ client:', err);
+        router.push('/auth/login');
       }
     };
 
-    checkLoginStatus();
+    checkLoginAndSync();
   }, [router]);
 
-  // Load rooms and messages initially
+  // Load rooms and messages
   const loadRooms = useCallback(async () => {
+    if (!isClientReady) return;
     setLoading(true);
     await withErrorHandling(
       async () => {
-        console.log("Bắt đầu đồng bộ Matrix client...");
-        await chatService.waitForSync(120000);
-        console.log("Đồng bộ hoàn tất, bắt đầu lấy danh sách phòng...");
+        console.log('Bắt đầu lấy danh sách phòng...');
         const joinedRooms = await roomService.fetchJoinedRooms();
-        console.log("Danh sách phòng:", joinedRooms);
+        console.log('Danh sách phòng:', joinedRooms);
         setRooms(joinedRooms);
       },
-      'Không thể tải danh sách phòng.',
+      ERROR_MESSAGES.FETCH_ROOMS_FAILED,
       setError
     ).finally(() => setLoading(false));
+  }, [isClientReady]);
+
+  // Update room list with new message data
+  const updateRoomList = useCallback((updatedRoom: Partial<RoomData>) => {
+    setRooms((prevRooms) => {
+      const updatedRooms = prevRooms.map((r) =>
+        r.roomId === updatedRoom.roomId ? { ...r, ...updatedRoom } : r
+      );
+      return sortRoomsByTimestamp(updatedRooms);
+    });
   }, []);
 
-  const handleCreateRoom = useCallback(async (roomName: string) => {
-    await withErrorHandling(
-      async () => {
-        await roomService.createRoom(roomName);
-        alert('Phòng đã được tạo!');
-        await loadRooms();
-      },
-      'Không thể tạo phòng.',
-      setError
-    );
-  }, [loadRooms]);
+  // Handle room creation
+  const handleCreateRoom = useCallback(
+    async (roomName: string) => {
+      await withErrorHandling(
+        async () => {
+          await roomService.createRoom(roomName);
+          alert('Phòng đã được tạo!');
+          await loadRooms();
+        },
+        ERROR_MESSAGES.CREATE_ROOM_FAILED,
+        setError
+      );
+    },
+    [loadRooms]
+  );
 
+  // Setup listeners for new messages
   useEffect(() => {
+    if (!isClientReady) return;
     loadRooms();
 
     const setupListeners = async () => {
       const client = await authService.getAuthenticatedClient();
 
       const handleNewMessage = async (event: MatrixEvent, room?: Room) => {
-        if (!room || event.getType() !== 'm.room.message') return;
-
-        const roomId = event.getRoomId();
-        const content = event.getContent();
-        const eventDate = new Date(event.getTs());
-        const today = new Date();
-        const isToday = eventDate.toDateString() === today.toDateString();
-        const timestamp = isToday
-          ? eventDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-          : eventDate.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" });
-        const senderId = event.getSender();
-        const senderName = senderId ? client.getUser(senderId)?.displayName || senderId : "Unknown";
-
-        // Cập nhật danh sách phòng
-        setRooms((prevRooms) => {
-          const updatedRooms = prevRooms.map((r) =>
-            r.roomId === roomId
-              ? {
-                  ...r,
-                  lastMessage: content.body || "Tin nhắn không có nội dung",
-                  timestamp,
-                  ts: event.getTs(),
-                  sender: senderName,
-                }
-              : r
-          );
-          // Sắp xếp lại theo thời gian tin nhắn mới nhất
-          return updatedRooms.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-        });
+        if (!room) return;
+        const updatedRoom = await chatService.processNewMessage(event, room, client);
+        if (updatedRoom) {
+          updateRoomList(updatedRoom);
+        }
       };
 
       const removeMessageListener = await chatService.onNewMessage(handleNewMessage);
@@ -122,7 +111,7 @@ const RoomList: React.FC = () => {
     return () => {
       if (cleanup) cleanup();
     };
-  }, [loadRooms]);
+  }, [isClientReady, loadRooms, updateRoomList]);
 
   return (
     <div className="flex h-screen bg-white text-black">
@@ -134,9 +123,11 @@ const RoomList: React.FC = () => {
         <div className="flex-1 overflow-y-auto">
           {loading && <p className="text-gray-500 animate-pulse px-4">Đang tải danh sách phòng...</p>}
           {error && <p className="text-red-500 px-4">❌ {error}</p>}
-          {!loading && rooms.length === 0 && <p className="text-gray-500 px-4">Không có phòng nào.</p>}
+          {!loading && rooms.length === 0 && (
+            <p className="text-gray-500 px-4">Không có phòng nào.</p>
+          )}
 
-          {!loading &&
+          {!loading && isClientReady &&
             rooms.map((room) => (
               <ChatItem
                 key={room.roomId}
@@ -160,7 +151,11 @@ const RoomList: React.FC = () => {
       </main>
 
       {/* Create Room Modal */}
-      <CreateRoomModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onCreate={handleCreateRoom} />
+      <CreateRoomModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onCreate={handleCreateRoom}
+      />
     </div>
   );
 };

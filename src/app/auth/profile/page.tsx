@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import authService from '@/app/service/auth/authService';
+import authService from '@/app/services/auth/authService';
 import { MatrixClient } from 'matrix-js-sdk';
 import Footer from '@/app/components/common/Footer'; 
 

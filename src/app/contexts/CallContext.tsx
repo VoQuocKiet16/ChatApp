@@ -1,7 +1,7 @@
 // src/app/contexts/CallContext.tsx
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { MatrixCall, MatrixClient, CallEvent } from 'matrix-js-sdk';
-import { CallService, CallType } from '@/app/service/matrix/callService';
+import { CallService, CallType } from '@/app/services/matrix/callService';
 
 interface CallState {
   activeCall: MatrixCall | null;

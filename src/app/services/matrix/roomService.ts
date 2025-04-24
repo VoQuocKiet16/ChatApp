@@ -1,22 +1,19 @@
-// roomService.ts
 import { MatrixClient, ICreateRoomOpts, Preset, Visibility, Room } from "matrix-js-sdk";
-import authService from "@/app/service/auth/authService";
+import authService from "@/app/services/auth/authService";
 
 export interface RoomData {
   roomId: string;
   name: string;
   lastMessage?: string;
   timestamp?: string;
-  ts?: number; // Thêm trường ts để lưu thời gian gốc
+  ts?: number;
   isGroup?: boolean;
   sender?: string;
 }
 
 export class RoomService {
-  // Không khởi tạo client trong constructor vì getAuthenticatedClient là async
   constructor() {}
 
-  // Phương thức riêng để lấy client bất đồng bộ
   private async getClient(): Promise<MatrixClient> {
     return await authService.getAuthenticatedClient();
   }
@@ -138,7 +135,6 @@ export class RoomService {
         })
       );
 
-      // Sắp xếp theo thời gian tin nhắn mới nhất (ts giảm dần)
       const sortedRooms = rooms.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       console.log("📦 Dữ liệu phòng trả về (đã sắp xếp):", sortedRooms);
       return sortedRooms;
